@@ -1,16 +1,20 @@
-// Copyright (c) 2011-2018 The Bitcoin Core developers
+// Copyright (c) 2011-2021 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef BITCOIN_QT_SENDCOINSENTRY_H
 #define BITCOIN_QT_SENDCOINSENTRY_H
 
-#include <qt/walletmodel.h>
+#include <qt/sendcoinsrecipient.h>
 
-#include <QStackedWidget>
+#include <QWidget>
 
 class WalletModel;
 class PlatformStyle;
+
+namespace interfaces {
+class Node;
+} // namespace interfaces
 
 namespace Ui {
     class SendCoinsEntry;
@@ -18,10 +22,8 @@ namespace Ui {
 
 /**
  * A single entry in the dialog for sending bitcoins.
- * Stacked widget, with different UIs for payment requests
- * with a strong payee identity.
  */
-class SendCoinsEntry : public QStackedWidget
+class SendCoinsEntry : public QWidget
 {
     Q_OBJECT
 
@@ -64,6 +66,9 @@ private Q_SLOTS:
     void on_addressBookButton_clicked();
     void on_pasteButton_clicked();
     void updateDisplayUnit();
+
+protected:
+    void changeEvent(QEvent* e) override;
 
 private:
     SendCoinsRecipient recipient;

@@ -3,47 +3,86 @@ Building Bitcoin Core with Visual Studio
 
 Introduction
 ---------------------
-Solution and project files to build the Bitcoin Core applications (except Qt dependent ones) with Visual Studio 2017 can be found in the build_msvc directory.
+Visual Studio 2022 is minimum required to build Bitcoin Core.
 
-Building with Visual Studio is an alternative to the Linux based [cross-compiler build](https://github.com/bitcoin/bitcoin/blob/master/doc/build-windows.md).
+Solution and project files to build with `msbuild` or Visual Studio can be found in the `build_msvc` directory.
 
-Dependencies
+To build Bitcoin Core from the command-line, it is sufficient to only install the Visual Studio Build Tools component.
+
+Building with Visual Studio is an alternative to the Linux based [cross-compiler build](../doc/build-windows.md).
+
+
+Prerequisites
 ---------------------
-A number of [open source libraries](https://github.com/bitcoin/bitcoin/blob/master/doc/dependencies.md) are required in order to be able to build Bitcoin.
+To build [dependencies](../doc/dependencies.md) (except for [Qt](#qt)),
+the default approach is to use the [vcpkg](https://docs.microsoft.com/en-us/cpp/vcpkg) package manager from Microsoft:
 
-Options for installing the dependencies in a Visual Studio compatible manner are:
+1. [Install](https://vcpkg.io/en/getting-started.html) vcpkg.
 
-- Use Microsoft's [vcpkg](https://docs.microsoft.com/en-us/cpp/vcpkg) to download the source packages and build locally. This is the recommended approach.
-- Download the source code, build each dependency, add the required include paths, link libraries and binary tools to the Visual Studio project files.
-- Use [nuget](https://www.nuget.org/) packages with the understanding that any binary files have been compiled by an untrusted third party.
+2. By default, vcpkg makes both `release` and `debug` builds for each package.
+To save build time and disk space, one could skip `debug` builds (example uses PowerShell):
+```powershell
 
-The external dependencies required for the Visual Studio build are (see the [dependencies doc](https://github.com/bitcoin/bitcoin/blob/master/doc/dependencies.md) for versions):
+Add-Content -Path "vcpkg\triplets\x64-windows-static.cmake" -Value "set(VCPKG_BUILD_TYPE release)"
+```
 
-- Berkeley DB,
-- OpenSSL,
-- Boost,
-- libevent,
-- ZeroMQ
+Qt
+---------------------
+To build Bitcoin Core with the GUI, a static build of Qt is required.
 
-Additional dependencies required from the [bitcoin-core](https://github.com/bitcoin-core) github repository are:
-- SECP256K1,
-- LevelDB
+1. Download a single ZIP archive of Qt source code from https://download.qt.io/official_releases/qt/ (e.g., [`qt-everywhere-opensource-src-5.15.5.zip`](https://download.qt.io/official_releases/qt/5.15/5.15.5/single/qt-everywhere-opensource-src-5.15.5.zip)), and expand it into a dedicated folder. The following instructions assume that this folder is `C:\dev\qt-source`.
+
+2. Open "x64 Native Tools Command Prompt for VS 2022", and input the following commands:
+```cmd
+cd C:\dev\qt-source
+mkdir build
+cd build
+..\configure -release -silent -opensource -confirm-license -opengl desktop -static -static-runtime -mp -qt-zlib -qt-pcre -qt-libpng -nomake examples -nomake tests -nomake tools -no-angle -no-dbus -no-gif -no-gtk -no-ico -no-icu -no-libjpeg -no-libudev -no-sql-sqlite -no-sql-odbc -no-sqlite -no-vulkan -skip qt3d -skip qtactiveqt -skip qtandroidextras -skip qtcharts -skip qtconnectivity -skip qtdatavis3d -skip qtdeclarative -skip doc -skip qtdoc -skip qtgamepad -skip qtgraphicaleffects -skip qtimageformats -skip qtlocation -skip qtlottie -skip qtmacextras -skip qtmultimedia -skip qtnetworkauth -skip qtpurchasing -skip qtquick3d -skip qtquickcontrols -skip qtquickcontrols2 -skip qtquicktimeline -skip qtremoteobjects -skip qtscript -skip qtscxml -skip qtsensors -skip qtserialbus -skip qtserialport -skip qtspeech -skip qtsvg -skip qtvirtualkeyboard -skip qtwayland -skip qtwebchannel -skip qtwebengine -skip qtwebglplugin -skip qtwebsockets -skip qtwebview -skip qtx11extras -skip qtxmlpatterns -no-openssl -no-feature-bearermanagement -no-feature-printdialog -no-feature-printer -no-feature-printpreviewdialog -no-feature-printpreviewwidget -no-feature-sql -no-feature-sqlmodel -no-feature-textbrowser -no-feature-textmarkdownwriter -no-feature-textodfwriter -no-feature-xml -prefix C:\Qt_static
+nmake
+nmake install
+```
+
+One could speed up building with [`jom`](https://wiki.qt.io/Jom), a replacement for `nmake` which makes use of all CPU cores.
+
+To build Bitcoin Core without Qt, unload or disable the `bitcoin-qt`, `libbitcoin_qt` and `test_bitcoin-qt` projects.
+
 
 Building
 ---------------------
-The instructions below use `vcpkg` to install the dependencies.
+1. Use Python to generate `*.vcxproj` for the Visual Studio 2022 toolchain from Makefile:
 
-- Clone `vcpkg` from the [github repository](https://github.com/Microsoft/vcpkg) and install as per the instructions in the main README.md.
-- Install the required packages (replace x64 with x86 as required):
-
-```
-    PS >.\vcpkg install --triplet x64-windows-static boost-filesystem boost-signals2 boost-test libevent openssl zeromq berkeleydb secp256k1 leveldb
+```cmd
+python build_msvc\msvc-autogen.py
 ```
 
-- Use Python to generate *.vcxproj from Makefile
+2. An optional step is to adjust the settings in the `build_msvc` directory and the `common.init.vcxproj` file. This project file contains settings that are common to all projects such as the runtime library version and target Windows SDK version. The Qt directories can also be set. To specify a non-default path to a static Qt package directory, use the `QTBASEDIR` environment variable.
+
+3. To build from the command-line with the Visual Studio toolchain use:
+
+```cmd
+msbuild build_msvc\bitcoin.sln -property:Configuration=Release -maxCpuCount -verbosity:minimal
+```
+
+Alternatively, open the `build_msvc/bitcoin.sln` file in Visual Studio.
+
+Security
+---------------------
+[Base address randomization](https://docs.microsoft.com/en-us/cpp/build/reference/dynamicbase-use-address-space-layout-randomization?view=msvc-160) is used to make Bitcoin Core more secure. When building Bitcoin using the `build_msvc` process base address randomization can be disabled by editing `common.init.vcproj` to change `RandomizedBaseAddress` from `true` to `false` and then rebuilding the project.
+
+To check if `bitcoind` has `RandomizedBaseAddress` enabled or disabled run
 
 ```
-    PS >python msvc-autogen.py
+.\dumpbin.exe /headers src/bitcoind.exe
 ```
 
-- Build in Visual Studio.
+If is it enabled then in the output `Dynamic base` will be listed in the `DLL characteristics` under `OPTIONAL HEADER VALUES` as shown below
+
+```
+            8160 DLL characteristics
+                   High Entropy Virtual Addresses
+                   Dynamic base
+                   NX compatible
+                   Terminal Server Aware
+```
+
+This may not disable all stack randomization as versions of windows employ additional stack randomization protections. These protections must be turned off in the OS configuration.

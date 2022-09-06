@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Bitcoin Core developers
+// Copyright (c) 2018-2019 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,9 +6,12 @@
 #define BITCOIN_BLOCKFILTER_H
 
 #include <stdint.h>
+#include <string>
+#include <set>
 #include <unordered_set>
 #include <vector>
 
+#include <attributes.h>
 #include <primitives/block.h>
 #include <serialize.h>
 #include <uint256.h>
@@ -57,14 +60,14 @@ public:
     explicit GCSFilter(const Params& params = Params());
 
     /** Reconstructs an already-created filter from an encoding. */
-    GCSFilter(const Params& params, std::vector<unsigned char> encoded_filter);
+    GCSFilter(const Params& params, std::vector<unsigned char> encoded_filter, bool skip_decode_check);
 
     /** Builds a new filter from the params and set of elements. */
     GCSFilter(const Params& params, const ElementSet& elements);
 
     uint32_t GetN() const { return m_N; }
-    const Params& GetParams() const { return m_params; }
-    const std::vector<unsigned char>& GetEncoded() const { return m_encoded; }
+    const Params& GetParams() const LIFETIMEBOUND { return m_params; }
+    const std::vector<unsigned char>& GetEncoded() const LIFETIMEBOUND { return m_encoded; }
 
     /**
      * Checks if the element may be in the set. False positives are possible
@@ -89,6 +92,18 @@ enum class BlockFilterType : uint8_t
     INVALID = 255,
 };
 
+/** Get the human-readable name for a filter type. Returns empty string for unknown types. */
+const std::string& BlockFilterTypeName(BlockFilterType filter_type);
+
+/** Find a filter type by its human-readable name. */
+bool BlockFilterTypeByName(const std::string& name, BlockFilterType& filter_type);
+
+/** Get a list of known filter types. */
+const std::set<BlockFilterType>& AllBlockFilterTypes();
+
+/** Get a comma-separated list of known filter type names. */
+const std::string& ListBlockFilterTypes();
+
 /**
  * Complete block filter struct as defined in BIP 157. Serialization matches
  * payload of "cfilter" messages.
@@ -108,16 +123,16 @@ public:
 
     //! Reconstruct a BlockFilter from parts.
     BlockFilter(BlockFilterType filter_type, const uint256& block_hash,
-                std::vector<unsigned char> filter);
+                std::vector<unsigned char> filter, bool skip_decode_check);
 
     //! Construct a new BlockFilter of the specified type from a block.
     BlockFilter(BlockFilterType filter_type, const CBlock& block, const CBlockUndo& block_undo);
 
     BlockFilterType GetFilterType() const { return m_filter_type; }
-    const uint256& GetBlockHash() const { return m_block_hash; }
-    const GCSFilter& GetFilter() const { return m_filter; }
+    const uint256& GetBlockHash() const LIFETIMEBOUND { return m_block_hash; }
+    const GCSFilter& GetFilter() const LIFETIMEBOUND { return m_filter; }
 
-    const std::vector<unsigned char>& GetEncodedFilter() const
+    const std::vector<unsigned char>& GetEncodedFilter() const LIFETIMEBOUND
     {
         return m_filter.GetEncoded();
     }
@@ -130,8 +145,8 @@ public:
 
     template <typename Stream>
     void Serialize(Stream& s) const {
-        s << m_block_hash
-          << static_cast<uint8_t>(m_filter_type)
+        s << static_cast<uint8_t>(m_filter_type)
+          << m_block_hash
           << m_filter.GetEncoded();
     }
 
@@ -140,8 +155,8 @@ public:
         std::vector<unsigned char> encoded_filter;
         uint8_t filter_type;
 
-        s >> m_block_hash
-          >> filter_type
+        s >> filter_type
+          >> m_block_hash
           >> encoded_filter;
 
         m_filter_type = static_cast<BlockFilterType>(filter_type);
@@ -150,7 +165,7 @@ public:
         if (!BuildParams(params)) {
             throw std::ios_base::failure("unknown filter_type");
         }
-        m_filter = GCSFilter(params, std::move(encoded_filter));
+        m_filter = GCSFilter(params, std::move(encoded_filter), /*skip_decode_check=*/false);
     }
 };
 

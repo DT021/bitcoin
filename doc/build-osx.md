@@ -1,207 +1,284 @@
-macOS Build Instructions and Notes
-====================================
+# macOS Build Guide
+
+**Updated for MacOS [11.2](https://www.apple.com/macos/big-sur/)**
+
+This guide describes how to build bitcoind, command-line utilities, and GUI on macOS
+
+## Preparation
+
 The commands in this guide should be executed in a Terminal application.
-The built-in one is located in `/Applications/Utilities/Terminal.app`.
+macOS comes with a built-in Terminal located in:
 
-Preparation
------------
-Install the macOS command line tools:
+```
+/Applications/Utilities/Terminal.app
+```
 
-`xcode-select --install`
+### 1. Xcode Command Line Tools
 
-When the popup appears, click `Install`.
+The Xcode Command Line Tools are a collection of build tools for macOS.
+These tools must be installed in order to build Bitcoin Core from source.
 
-Then install [Homebrew](https://brew.sh).
+To install, run the following command from your terminal:
 
-Dependencies
-----------------------
+``` bash
+xcode-select --install
+```
 
-    brew install automake berkeley-db4 libtool boost miniupnpc openssl pkg-config protobuf python qt libevent qrencode
+Upon running the command, you should see a popup appear.
+Click on `Install` to continue the installation process.
+
+### 2. Homebrew Package Manager
+
+Homebrew is a package manager for macOS that allows one to install packages from the command line easily.
+While several package managers are available for macOS, this guide will focus on Homebrew as it is the most popular.
+Since the examples in this guide which walk through the installation of a package will use Homebrew, it is recommended that you install it to follow along.
+Otherwise, you can adapt the commands to your package manager of choice.
+
+To install the Homebrew package manager, see: https://brew.sh
+
+Note: If you run into issues while installing Homebrew or pulling packages, refer to [Homebrew's troubleshooting page](https://docs.brew.sh/Troubleshooting).
+
+### 3. Install Required Dependencies
+
+The first step is to download the required dependencies.
+These dependencies represent the packages required to get a barebones installation up and running.
 
 See [dependencies.md](dependencies.md) for a complete overview.
 
-If you want to build the disk image with `make deploy` (.dmg / optional), you need RSVG:
+To install, run the following from your terminal:
 
-    brew install librsvg
-
-Berkeley DB
------------
-It is recommended to use Berkeley DB 4.8. If you have to build it yourself,
-you can use [the installation script included in contrib/](/contrib/install_db4.sh)
-like so:
-
-```shell
-./contrib/install_db4.sh .
+``` bash
+brew install automake libtool boost pkg-config libevent
 ```
 
-from the root of the repository.
+### 4. Clone Bitcoin repository
 
-**Note**: You only need Berkeley DB if the wallet is enabled (see [*Disable-wallet mode*](/doc/build-osx.md#disable-wallet-mode)).
+`git` should already be installed by default on your system.
+Now that all the required dependencies are installed, let's clone the Bitcoin Core repository to a directory.
+All build scripts and commands will run from this directory.
 
-Build Bitcoin Core
-------------------------
+``` bash
+git clone https://github.com/bitcoin/bitcoin.git
+```
 
-1. Clone the Bitcoin Core source code:
+### 5. Install Optional Dependencies
 
-        git clone https://github.com/bitcoin/bitcoin
-        cd bitcoin
+#### Wallet Dependencies
 
-2.  Build Bitcoin Core:
+It is not necessary to build wallet functionality to run `bitcoind` or  `bitcoin-qt`.
 
-    Configure and build the headless Bitcoin Core binaries as well as the GUI (if Qt is found).
+###### Descriptor Wallet Support
 
-    You can disable the GUI build by passing `--without-gui` to configure.
+`sqlite` is required to support for descriptor wallets.
 
-        ./autogen.sh
-        ./configure
-        make
+macOS ships with a useable `sqlite` package, meaning you don't need to
+install anything.
 
-3.  It is recommended to build and run the unit tests:
+###### Legacy Wallet Support
 
-        make check
+`berkeley-db@4` is only required to support for legacy wallets.
+Skip if you don't intend to use legacy wallets.
 
-4.  You can also create a .dmg that contains the .app bundle (optional):
+``` bash
+brew install berkeley-db@4
+```
+---
 
-        make deploy
+#### GUI Dependencies
 
-Disable-wallet mode
---------------------
-When the intention is to run only a P2P node without a wallet, Bitcoin Core may be compiled in
-disable-wallet mode with:
+###### Qt
 
-    ./configure --disable-wallet
+Bitcoin Core includes a GUI built with the cross-platform Qt Framework.
+To compile the GUI, we need to install `qt@5`.
+Skip if you don't intend to use the GUI.
 
-In this case there is no dependency on Berkeley DB 4.8.
+``` bash
+brew install qt@5
+```
 
-Mining is also possible in disable-wallet mode using the `getblocktemplate` RPC call.
+Ensure that the `qt@5` package is installed, not the `qt` package.
+If 'qt' is installed, the build process will fail.
+if installed, remove the `qt` package with the following command:
 
-Running
--------
+``` bash
+brew uninstall qt
+```
 
-Bitcoin Core is now available at `./src/bitcoind`
+Note: Building with Qt binaries downloaded from the Qt website is not officially supported.
+See the notes in [#7714](https://github.com/bitcoin/bitcoin/issues/7714).
+
+###### qrencode
+
+The GUI can encode addresses in a QR Code. To build in QR support for the GUI, install `qrencode`.
+Skip if not using the GUI or don't want QR code functionality.
+
+``` bash
+brew install qrencode
+```
+---
+
+#### Port Mapping Dependencies
+
+###### miniupnpc
+
+miniupnpc may be used for UPnP port mapping.
+Skip if you do not need this functionality.
+
+``` bash
+brew install miniupnpc
+```
+
+###### libnatpmp
+
+libnatpmp may be used for NAT-PMP port mapping.
+Skip if you do not need this functionality.
+
+``` bash
+brew install libnatpmp
+```
+
+Note: UPnP and NAT-PMP support will be compiled in and disabled by default.
+Check out the [further configuration](#further-configuration) section for more information.
+
+---
+
+#### ZMQ Dependencies
+
+Support for ZMQ notifications requires the following dependency.
+Skip if you do not need ZMQ functionality.
+
+``` bash
+brew install zeromq
+```
+
+ZMQ is automatically compiled in and enabled if the dependency is detected.
+Check out the [further configuration](#further-configuration) section for more information.
+
+For more information on ZMQ, see: [zmq.md](zmq.md)
+
+---
+
+#### Test Suite Dependencies
+
+There is an included test suite that is useful for testing code changes when developing.
+To run the test suite (recommended), you will need to have Python 3 installed:
+
+``` bash
+brew install python
+```
+
+---
+
+#### Deploy Dependencies
+
+You can deploy a `.dmg` containing the Bitcoin Core application using `make deploy`.
+This command depends on a couple of python packages, so it is required that you have `python` installed.
+
+Ensuring that `python` is installed, you can install the deploy dependencies by running the following commands in your terminal:
+
+``` bash
+pip3 install ds_store mac_alias
+```
+
+## Building Bitcoin Core
+
+### 1. Configuration
+
+There are many ways to configure Bitcoin Core, here are a few common examples:
+
+##### Wallet (BDB + SQlite) Support, No GUI:
+
+If `berkeley-db@4` is installed, then legacy wallet support will be built.
+If `berkeley-db@4` is not installed, then this will throw an error.
+If `sqlite` is installed, then descriptor wallet support will also be built.
+Additionally, this explicitly disables the GUI.
+
+``` bash
+./autogen.sh
+./configure --with-gui=no
+```
+
+##### Wallet (only SQlite) and GUI Support:
+
+This explicitly enables the GUI and disables legacy wallet support.
+If `qt` is not installed, this will throw an error.
+If `sqlite` is installed then descriptor wallet functionality will be built.
+If `sqlite` is not installed, then wallet functionality will be disabled.
+
+``` bash
+./autogen.sh
+./configure --without-bdb --with-gui=yes
+```
+
+##### No Wallet or GUI
+
+``` bash
+./autogen.sh
+./configure --without-wallet --with-gui=no
+```
+
+##### Further Configuration
+
+You may want to dig deeper into the configuration options to achieve your desired behavior.
+Examine the output of the following command for a full list of configuration options:
+
+``` bash
+./configure -help
+```
+
+### 2. Compile
+
+After configuration, you are ready to compile.
+Run the following in your terminal to compile Bitcoin Core:
+
+``` bash
+make        # use "-j N" here for N parallel jobs
+make check  # Run tests if Python 3 is available
+```
+
+### 3. Deploy (optional)
+
+You can also create a  `.dmg` containing the `.app` bundle by running the following command:
+
+``` bash
+make deploy
+```
+
+## Running Bitcoin Core
+
+Bitcoin Core should now be available at `./src/bitcoind`.
+If you compiled support for the GUI, it should be available at `./src/qt/bitcoin-qt`.
+
+The first time you run `bitcoind` or `bitcoin-qt`, it will start downloading the blockchain.
+This process could take many hours, or even days on slower than average systems.
+
+By default, blockchain and wallet data files will be stored in:
+
+``` bash
+/Users/${USER}/Library/Application Support/Bitcoin/
+```
 
 Before running, you may create an empty configuration file:
 
-    touch "/Users/${USER}/Library/Application Support/Bitcoin/bitcoin.conf"
+```shell
+mkdir -p "/Users/${USER}/Library/Application Support/Bitcoin"
 
-    chmod 600 "/Users/${USER}/Library/Application Support/Bitcoin/bitcoin.conf"
+touch "/Users/${USER}/Library/Application Support/Bitcoin/bitcoin.conf"
 
-The first time you run bitcoind, it will start downloading the blockchain. This process could take many hours, or even days on slower than average systems.
+chmod 600 "/Users/${USER}/Library/Application Support/Bitcoin/bitcoin.conf"
+```
 
 You can monitor the download process by looking at the debug.log file:
 
-    tail -f $HOME/Library/Application\ Support/Bitcoin/debug.log
-
-Other commands:
--------
-
-    ./src/bitcoind -daemon # Starts the bitcoin daemon.
-    ./src/bitcoin-cli --help # Outputs a list of command-line options.
-    ./src/bitcoin-cli help # Outputs a list of RPC commands when the daemon is running.
-
-Notes
------
-
-* Tested on OS X 10.10 Yosemite through macOS 10.13 High Sierra on 64-bit Intel processors only.
-
-* Building with downloaded Qt binaries is not officially supported. See the notes in [#7714](https://github.com/bitcoin/bitcoin/issues/7714)
-
-Deterministic macOS DMG Notes
------------------------------
-
-Working macOS DMGs are created in Linux by combining a recent clang,
-the Apple binutils (ld, ar, etc) and DMG authoring tools.
-
-Apple uses clang extensively for development and has upstreamed the necessary
-functionality so that a vanilla clang can take advantage. It supports the use
-of -F, -target, -mmacosx-version-min, and --sysroot, which are all necessary
-when building for macOS.
-
-Apple's version of binutils (called cctools) contains lots of functionality
-missing in the FSF's binutils. In addition to extra linker options for
-frameworks and sysroots, several other tools are needed as well such as
-install_name_tool, lipo, and nmedit. These do not build under linux, so they
-have been patched to do so. The work here was used as a starting point:
-[mingwandroid/toolchain4](https://github.com/mingwandroid/toolchain4).
-
-In order to build a working toolchain, the following source packages are needed
-from Apple: cctools, dyld, and ld64.
-
-These tools inject timestamps by default, which produce non-deterministic
-binaries. The ZERO_AR_DATE environment variable is used to disable that.
-
-This version of cctools has been patched to use the current version of clang's
-headers and its libLTO.so rather than those from llvmgcc, as it was
-originally done in toolchain4.
-
-To complicate things further, all builds must target an Apple SDK. These SDKs
-are free to download, but not redistributable.
-To obtain it, register for a developer account, then download the [Xcode 7.3.1 dmg](https://developer.apple.com/devcenter/download.action?path=/Developer_Tools/Xcode_7.3.1/Xcode_7.3.1.dmg).
-
-This file is several gigabytes in size, but only a single directory inside is
-needed:
-```
-Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk
+```shell
+tail -f $HOME/Library/Application\ Support/Bitcoin/debug.log
 ```
 
-Unfortunately, the usual linux tools (7zip, hpmount, loopback mount) are incapable of opening this file.
-To create a tarball suitable for Gitian input, there are two options:
+## Other commands:
 
-Using macOS, you can mount the dmg, and then create it with:
+```shell
+./src/bitcoind -daemon      # Starts the bitcoin daemon.
+./src/bitcoin-cli --help    # Outputs a list of command-line options.
+./src/bitcoin-cli help      # Outputs a list of RPC commands when the daemon is running.
+./src/qt/bitcoin-qt -server # Starts the bitcoin-qt server mode, allows bitcoin-cli control
 ```
-  $ hdiutil attach Xcode_7.3.1.dmg
-  $ tar -C /Volumes/Xcode/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/ -czf MacOSX10.11.sdk.tar.gz MacOSX10.11.sdk
-```
-
-Alternatively, you can use 7zip and SleuthKit to extract the files one by one.
-The script contrib/macdeploy/extract-osx-sdk.sh automates this. First ensure
-the dmg file is in the current directory, and then run the script. You may wish
-to delete the intermediate 5.hfs file and MacOSX10.11.sdk (the directory) when
-you've confirmed the extraction succeeded.
-
-```bash
-apt-get install p7zip-full sleuthkit
-contrib/macdeploy/extract-osx-sdk.sh
-rm -rf 5.hfs MacOSX10.11.sdk
-```
-
-The Gitian descriptors build 2 sets of files: Linux tools, then Apple binaries
-which are created using these tools. The build process has been designed to
-avoid including the SDK's files in Gitian's outputs. All interim tarballs are
-fully deterministic and may be freely redistributed.
-
-genisoimage is used to create the initial DMG. It is not deterministic as-is,
-so it has been patched. A system genisoimage will work fine, but it will not
-be deterministic because the file-order will change between invocations.
-The patch can be seen here:  [theuni/osx-cross-depends](https://raw.githubusercontent.com/theuni/osx-cross-depends/master/patches/cdrtools/genisoimage.diff).
-No effort was made to fix this cleanly, so it likely leaks memory badly. But
-it's only used for a single invocation, so that's no real concern.
-
-genisoimage cannot compress DMGs, so afterwards, the 'dmg' tool from the
-libdmg-hfsplus project is used to compress it. There are several bugs in this
-tool and its maintainer has seemingly abandoned the project. It has been forked
-and is available (with fixes) here: [theuni/libdmg-hfsplus](https://github.com/theuni/libdmg-hfsplus).
-
-The 'dmg' tool has the ability to create DMGs from scratch as well, but this
-functionality is broken. Only the compression feature is currently used.
-Ideally, the creation could be fixed and genisoimage would no longer be necessary.
-
-Background images and other features can be added to DMG files by inserting a
-.DS_Store before creation. This is generated by the script
-contrib/macdeploy/custom_dsstore.py.
-
-As of OS X 10.9 Mavericks, using an Apple-blessed key to sign binaries is a
-requirement in order to satisfy the new Gatekeeper requirements. Because this
-private key cannot be shared, we'll have to be a bit creative in order for the
-build process to remain somewhat deterministic. Here's how it works:
-
-- Builders use Gitian to create an unsigned release. This outputs an unsigned
-  dmg which users may choose to bless and run. It also outputs an unsigned app
-  structure in the form of a tarball, which also contains all of the tools
-  that have been previously (deterministically) built in order to create a
-  final dmg.
-- The Apple keyholder uses this unsigned app to create a detached signature,
-  using the script that is also included there. Detached signatures are available from this [repository](https://github.com/bitcoin-core/bitcoin-detached-sigs).
-- Builders feed the unsigned app + detached signature back into Gitian. It
-  uses the pre-built tools to recombine the pieces into a deterministic dmg.
-
